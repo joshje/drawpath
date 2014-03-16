@@ -2,12 +2,12 @@ html,
 body {
     margin: 0;
     padding: 0;
+    overflow: hidden;
 }
 
 body {
     font-family: sans-serif;
     background: #FFF;
-    overflow: hidden;
 }
 .drawpath-code {
     position: absolute;
@@ -19,7 +19,7 @@ body {
     border: 1px solid #CCC;
     width: 200px;
     max-height: 30%;
-    overflow: scroll;
+    overflow: auto;
     padding: 10px;
     transition: background 1s linear, border-color 1s linear;
 }

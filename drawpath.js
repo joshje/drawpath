@@ -21,6 +21,8 @@ var setup = function() {
 var loop = function() {
     canvas.clear();
     code.clear();
+
+    grid.update();
     vectors.update();
     mouse.update();
 
@@ -59,23 +61,28 @@ var Canvas = function(className) {
     };
 
     this.resize = function() {
-        this.width = window.innerWidth;
-        this.height = window.innerHeight;
-        this.half = new Vector2(this.width, this.height).multiplyEq(0.5).floor();
+        var width = window.innerWidth;
+        var height = window.innerHeight;
 
-        this.el.width = this.width;
-        this.el.height = this.height;
+        if (width !== this.width || height !== this.height) {
+            this.width = width;
+            this.height = height;
+
+            this.half = new Vector2(this.width, this.height).multiplyEq(0.5).floor();
+
+            this.el.width = this.width;
+            this.el.height = this.height;
+        }
     };
 
     this.resize();
-    window.addEventListener('resize', this.resize.bind(this));
+    setInterval(this.resize.bind(this), 200);
 };
 
 var Mouse = function() {
     this.offset = new Vector2(canvas.el.offsetTop, canvas.el.offsetLeft);
-    this.relative = this.offset.plusNew(canvas.half);
     this.pos = new Vector2();
-    this.abs = new Vector2();
+    this.centerPos = new Vector2();
     this.clicks = [];
     this.radius = 5;
     this.strokeStyle = '#000';
@@ -91,7 +98,7 @@ var Mouse = function() {
 
         ctx.save();
 
-        ctx.translate(this.abs.x + 0.5, this.abs.y + 0.5);
+        ctx.translate(this.pos.x - 0.5, this.pos.y - 0.5);
 
         ctx.beginPath();
         ctx.moveTo(-6, 0);
@@ -123,15 +130,18 @@ var Mouse = function() {
         this.updatePos(e.clientX, e.clientY);
         this.snapToStart();
 
-        this.clicks.push(this.pos.clone());
+        this.clicks.push({
+            pos: this.pos.clone(),
+            centerPos: this.centerPos.clone()
+        });
     };
 
     this.updatePos = function(x, y) {
-        this.abs.reset(x, y).minusEq(this.offset);
-        this.pos.reset(x, y).minusEq(this.relative);
+        this.pos.reset(x, y).minusEq(this.offset);
+        this.centerPos = this.pos.clone().minusEq(canvas.half);
         if (this.snapToGrid) {
-            this.abs.divideEq(10).round().multiplyEq(10);
-            this.pos.divideEq(10).round().multiplyEq(10);
+            this.centerPos.divideEq(10).round().multiplyEq(10);
+            this.pos = this.centerPos.clone().plusEq(canvas.half);
         }
     };
 
@@ -144,8 +154,9 @@ var Mouse = function() {
         var firstPoint = lastVector.getFirst();
         if (! firstPoint) return;
 
-        if (this.pos.isCloseTo(firstPoint.pos, 10)) {
-            this.pos = firstPoint.pos.clone();
+        if (this.centerPos.isCloseTo(firstPoint.pos, 10)) {
+            this.centerPos = firstPoint.pos.clone();
+            this.pos = this.centerPos.clone().plusEq(canvas.half);
         }
     };
 
@@ -154,10 +165,10 @@ var Mouse = function() {
     };
 
     this.checkInsideCanvas = function() {
-        if (this.pos.x > -canvas.half.x &&
-            this.pos.y > -canvas.half.y &&
-            this.pos.x < canvas.half.x &&
-            this.pos.y < canvas.half.y) {
+        if (this.pos.x > 0 &&
+            this.pos.y > 0 &&
+            this.pos.x < canvas.width &&
+            this.pos.y < canvas.height) {
             return true;
         }
 
@@ -201,7 +212,11 @@ var Keyboard = function() {
 
 var Grid = function() {
     this.spacing = 10;
-    this.pos = new Vector2(canvas.half.x - 0.5, canvas.half.y - 0.5);
+    this.pos = new Vector2();
+
+    this.update = function() {
+        this.pos.reset(canvas.half.x - 0.5, canvas.half.y - 0.5);
+    };
 
     this.render = function() {
         ctx.save();
@@ -236,7 +251,7 @@ var Grid = function() {
         ctx.moveTo(0, -canvas.half.y);
         ctx.lineTo(0, canvas.half.y);
         ctx.moveTo(-canvas.half.x, 0);
-        ctx.lineTo(canvas.half.y, 0);
+        ctx.lineTo(canvas.half.x, 0);
 
         ctx.strokeStyle = '#CCC';
         ctx.stroke();
@@ -287,11 +302,15 @@ var Code = function() {
 
 var Vectors = function() {
     this.list = [];
-    this.pos = new Vector2(canvas.half.x - 0.5, canvas.half.y - 0.5);
+    this.pos = new Vector2();
 
     this.update = function() {
-        mouse.clicks.forEach(function(clickPos) {
+        this.pos.reset(canvas.half.x - 0.5, canvas.half.y - 0.5);
+
+        mouse.clicks.forEach(function(c) {
+            var clickPos = c.centerPos.clone();
             var lastVector = this.getLast();
+
             if (!lastVector || lastVector.isClosed) {
                 lastVector = this.addVector(clickPos);
             }
@@ -385,8 +404,8 @@ var Vector = function(pos, hue) {
 
         }.bind(this));
 
-        if (withMouseLine && !this.getLast().pos.isCloseTo(mouse.pos, 5)) {
-            code.addLine('ctx.lineTo(' + mouse.pos.x + ', ' + mouse.pos.y + ');');
+        if (withMouseLine && !this.getLast().pos.isCloseTo(mouse.centerPos, 5)) {
+            code.addLine('ctx.lineTo(' + mouse.centerPos.x + ', ' + mouse.centerPos.y + ');');
         }
 
         if (this.isClosed) {
@@ -404,7 +423,7 @@ var Vector = function(pos, hue) {
         if (! lastPoint) return;
 
         ctx.moveTo(lastPoint.pos.x, lastPoint.pos.y);
-        ctx.lineTo(mouse.pos.x, mouse.pos.y);
+        ctx.lineTo(mouse.centerPos.x, mouse.centerPos.y);
         ctx.strokeStyle = hsl(this.hue, 100, 75);
         ctx.stroke();
     };

@@ -8,11 +8,11 @@ var canvas,
     vectors,
     mouse,
     keyboard,
-    code;
+    code,
+    controls;
 
 var setup = function() {
     canvas = new Canvas('drawpath-canvas');
-    canvas.setCursor('none');
 
     initObjects();
     loop();
@@ -20,15 +20,19 @@ var setup = function() {
 
 var loop = function() {
     canvas.clear();
+    canvas.setCursor('none');
     code.clear();
 
     grid.update();
+    controls.update();
     vectors.update();
     mouse.update();
+    canvas.update();
 
     grid.render();
     vectors.render();
     code.render();
+    controls.render();
     mouse.render();
 
     mouse.flush();
@@ -42,6 +46,7 @@ var initObjects = function() {
     mouse = new Mouse();
     code = new Code();
     keyboard = new Keyboard();
+    controls = new Controls();
 };
 
 var Canvas = function(className) {
@@ -55,8 +60,15 @@ var Canvas = function(className) {
 
     this.setCursor = function(cursor) {
         if (this.cursor !== cursor) {
-            this.el.style.cursor = cursor;
             this.cursor = cursor;
+            this.newCursor = cursor;
+        }
+    };
+
+    this.update = function() {
+        if (this.newCursor) {
+            this.el.style.cursor = this.newCursor;
+            this.newCursor = false;
         }
     };
 
@@ -94,7 +106,7 @@ var Mouse = function() {
     };
 
     this.render = function() {
-        if (! this.insideCanvas) return;
+        if (! this.insideCanvas || canvas.cursor !== 'none') return;
 
         ctx.save();
 
@@ -160,7 +172,7 @@ var Mouse = function() {
         var firstPoint = lastVector.getFirst();
         if (! firstPoint) return;
 
-        if (this.centerPos.isCloseTo(firstPoint.pos, 10)) {
+        if (this.centerPos.isCloseTo(firstPoint.pos, 5)) {
             this.centerPos = firstPoint.pos.clone();
             this.pos = this.centerPos.clone().plusEq(canvas.half);
         }
@@ -305,6 +317,8 @@ var Vectors = function() {
         this.pos.reset(canvas.half.x - 0.5, canvas.half.y - 0.5);
 
         mouse.clicks.forEach(function(c) {
+            if (c.hasFired) return;
+
             var clickPos = c.centerPos.clone();
             var lastVector = this.getLast();
 
@@ -327,7 +341,7 @@ var Vectors = function() {
         ctx.translate(this.pos.x, this.pos.y);
 
         this.forEach(function(vector, i){
-            var withMouseLine = (i == this.list.length - 1 && mouse.insideCanvas && !vector.isClosed);
+            var withMouseLine = (canvas.cursor == 'none' && i == this.list.length - 1 && mouse.insideCanvas && !vector.isClosed);
             vector.render(withMouseLine);
         }.bind(this));
 
@@ -502,6 +516,88 @@ var Point = function(pos, hue) {
     };
 };
 
+var Controls = function() {
+    this.buttons = [];
+
+    this.buttons.push(new Button({
+        icon: function() {
+            ctx.beginPath();
+            ctx.moveTo(7, 3);
+            ctx.lineTo(7, 17);
+            ctx.moveTo(13, 3);
+            ctx.lineTo(13, 17);
+            ctx.moveTo(3, 7);
+            ctx.lineTo(17, 7);
+            ctx.moveTo(3, 13);
+            ctx.lineTo(17, 13);
+
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
+            ctx.stroke();
+        },
+        checkActive: function() {
+            this.active = mouse.snapToGrid;
+        },
+        toggle: function() {
+            mouse.snapToGrid = !mouse.snapToGrid;
+        },
+        x: 10,
+        y: 10
+    }));
+
+    this.update = function() {
+        this.buttons.forEach(function(button) {
+            button.update();
+        });
+    };
+
+    this.render = function() {
+        this.buttons.forEach(function(button) {
+            button.render();
+        });
+    };
+};
+
+var Button = function(params) {
+    this.pos = new Vector2(params.x, params.y);
+    this.icon = params.icon;
+    this.checkActive = params.checkActive;
+    this.toggle = params.toggle;
+    this.update = function() {
+        if (this.checkActive) this.checkActive();
+
+        this.hovered = withinRect(mouse.pos, this.pos, 20, 20);
+
+        if (this.hovered) {
+            canvas.setCursor('pointer');
+        }
+
+        mouse.clicks.forEach(function(click) {
+            if (! click.hasFired && withinRect(click.pos, this.pos, 20, 20)) {
+                this.toggle();
+                click.hasFired = true;
+            }
+        }.bind(this));
+    };
+
+    this.render = function() {
+        ctx.save();
+        ctx.translate(this.pos.x - 0.5, this.pos.y - 0.5);
+
+        ctx.beginPath();
+        ctx.rect(0, 0, 20, 20);
+
+        ctx.fillStyle = this.active? '#EEE' : '#FFF';
+        ctx.fill();
+        ctx.strokeStyle = '#CCC';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        if (this.icon) this.icon();
+
+        ctx.restore();
+    };
+};
+
 var createEl = function(name, className) {
     var el = document.createElement(name);
     if (className) el.className = className;
@@ -512,6 +608,13 @@ var createEl = function(name, className) {
 
 var hsl = function(h, s, l) {
     return 'hsl('+h%360+', ' + Math.floor(s)+'%, ' + Math.floor(l) + '%)';
+};
+
+var withinRect = function(pos1, pos2, width, height) {
+    return (pos1.x >= pos2.x &&
+            pos1.x <= pos2.x + width &&
+            pos1.y >= pos2.y &&
+            pos1.y <= pos2.y + height);
 };
 
 setup();

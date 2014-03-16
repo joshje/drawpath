@@ -119,9 +119,15 @@ var Mouse = function() {
     this.onMove = function(e) {
         this.updatePos(e.clientX, e.clientY);
 
-        this.insideCanvas = this.checkInsideCanvas();
-
         this.snapToStart();
+    };
+
+    this.onMouseOver = function() {
+        this.insideCanvas = true;
+    };
+
+    this.onMouseOut = function() {
+        this.insideCanvas = false;
     };
 
     this.onClick = function(e) {
@@ -164,22 +170,13 @@ var Mouse = function() {
         this.snapToGrid = !this.snapToGrid;
     };
 
-    this.checkInsideCanvas = function() {
-        if (this.pos.x > 0 &&
-            this.pos.y > 0 &&
-            this.pos.x < canvas.width &&
-            this.pos.y < canvas.height) {
-            return true;
-        }
-
-        return false;
-    };
-
     this.flush = function() {
         this.clicks = [];
     };
 
     window.addEventListener('mousemove', this.onMove.bind(this));
+    canvas.el.addEventListener('mouseover', this.onMouseOver.bind(this));
+    canvas.el.addEventListener('mouseout', this.onMouseOut.bind(this));
     window.addEventListener('click', this.onClick.bind(this));
 };
 

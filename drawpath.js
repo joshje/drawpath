@@ -98,6 +98,7 @@ var Mouse = function() {
     this.clicks = [];
     this.radius = 5;
     this.strokeStyle = '#000';
+    this.mode = 'draw';
 
     this.update = function() {
         if (vectors.active) {
@@ -520,6 +521,51 @@ var Controls = function() {
     this.buttons = [];
 
     this.buttons.push(new Button({
+        name: 'drawMode',
+        icon: function() {
+            ctx.beginPath();
+            ctx.moveTo(5, 10);
+            ctx.lineTo(8, 10);
+            ctx.moveTo(12, 10);
+            ctx.lineTo(15, 10);
+            ctx.moveTo(10, 5);
+            ctx.lineTo(10, 8);
+            ctx.moveTo(10, 12);
+            ctx.lineTo(10, 15);
+        },
+        checkActive: function() {
+            this.active = mouse.mode == 'draw';
+        },
+        onClick: function() {
+            mouse.mode = 'draw';
+        },
+        x: 10,
+        y: 10
+    }));
+
+    this.buttons.push(new Button({
+        name: 'editMode',
+        icon: function() {
+            ctx.beginPath();
+            ctx.moveTo(6, 10);
+            ctx.lineTo(6, 6);
+            ctx.lineTo(10, 6);
+            ctx.moveTo(6, 6);
+            ctx.lineTo(14, 14);
+            ctx.closePath();
+        },
+        checkActive: function() {
+            this.active = mouse.mode == 'edit';
+        },
+        onClick: function() {
+            mouse.mode = 'edit';
+        },
+        x: 36,
+        y: 10
+    }));
+
+    this.buttons.push(new Button({
+        name: 'snapToGrid',
         icon: function() {
             ctx.beginPath();
             ctx.moveTo(7, 3);
@@ -530,30 +576,31 @@ var Controls = function() {
             ctx.lineTo(17, 7);
             ctx.moveTo(3, 13);
             ctx.lineTo(17, 13);
-
-            ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
-            ctx.stroke();
         },
         checkActive: function() {
             this.active = mouse.snapToGrid;
         },
-        toggle: function() {
+        onClick: function() {
             mouse.snapToGrid = !mouse.snapToGrid;
         },
-        x: 10,
+        x: 72,
         y: 10
     }));
 
     this.update = function() {
+        this.hovered = null;
         this.buttons.forEach(function(button) {
             button.update();
-        });
+            if (button.hovered) this.hovered = button;
+        }.bind(this));
     };
 
     this.render = function() {
         this.buttons.forEach(function(button) {
-            button.render();
+            if (! button.hovered) button.render();
         });
+
+        if (this.hovered) this.hovered.render();
     };
 };
 
@@ -561,19 +608,22 @@ var Button = function(params) {
     this.pos = new Vector2(params.x, params.y);
     this.icon = params.icon;
     this.checkActive = params.checkActive;
-    this.toggle = params.toggle;
+    this.onClick = params.onClick;
+    this.fillIcon = params.fillIcon;
+    this.size = 26;
+
     this.update = function() {
         if (this.checkActive) this.checkActive();
 
-        this.hovered = withinRect(mouse.pos, this.pos, 20, 20);
+        this.hovered = withinRect(mouse.pos, this.pos, this.size, this.size);
 
         if (this.hovered) {
             canvas.setCursor('pointer');
         }
 
         mouse.clicks.forEach(function(click) {
-            if (! click.hasFired && withinRect(click.pos, this.pos, 20, 20)) {
-                this.toggle();
+            if (! click.hasFired && withinRect(click.pos, this.pos, this.size, this.size)) {
+                this.onClick();
                 click.hasFired = true;
             }
         }.bind(this));
@@ -584,15 +634,19 @@ var Button = function(params) {
         ctx.translate(this.pos.x - 0.5, this.pos.y - 0.5);
 
         ctx.beginPath();
-        ctx.rect(0, 0, 20, 20);
+        ctx.rect(0, 0, this.size, this.size);
 
         ctx.fillStyle = this.active? '#EEE' : '#FFF';
         ctx.fill();
-        ctx.strokeStyle = '#CCC';
+        ctx.strokeStyle = (this.hovered)? '#AAA' : '#CCC';
         ctx.lineWidth = 1;
         ctx.stroke();
 
+        ctx.translate(3, 3);
         if (this.icon) this.icon();
+
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.stroke();
 
         ctx.restore();
     };

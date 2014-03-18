@@ -20,14 +20,12 @@ var setup = function() {
 
 var loop = function() {
     canvas.clear();
-    canvas.setCursor('none');
     code.clear();
 
+    mouse.update();
     grid.update();
     controls.update();
     vectors.update();
-    mouse.update();
-    canvas.update();
 
     grid.render();
     vectors.render();
@@ -35,6 +33,7 @@ var loop = function() {
     controls.render();
     mouse.render();
 
+    canvas.updateCursor();
     mouse.flush();
 
     setTimeout(loop, 1000 / fps);
@@ -65,7 +64,7 @@ var Canvas = function(className) {
         }
     };
 
-    this.update = function() {
+    this.updateCursor = function() {
         if (this.newCursor) {
             this.el.style.cursor = this.newCursor;
             this.newCursor = false;
@@ -101,6 +100,11 @@ var Mouse = function() {
     this.mode = 'draw';
 
     this.update = function() {
+        if (this.mode == 'draw') {
+            canvas.setCursor('none');
+        } else {
+            canvas.setCursor('default');
+        }
         if (vectors.active) {
             this.strokeStyle = hsl(vectors.active.hue, 50, 50);
         }
@@ -183,6 +187,10 @@ var Mouse = function() {
         this.snapToGrid = !this.snapToGrid;
     };
 
+    this.shiftMode = function() {
+        this.mode = (this.mode == 'draw')? 'edit' : 'draw';
+    };
+
     this.flush = function() {
         this.clicks = [];
     };
@@ -195,29 +203,49 @@ var Mouse = function() {
 
 var Keyboard = function() {
     this.key = {
-        S: 83,
+        SHIFT: 16,
         UP: 38,
         LEFT: 37,
         RIGHT: 39,
-        DOWN: 40
+        DOWN: 40,
+        S: 83
     };
 
     this.onKeydown = function(e) {
         var nudgeAmount = e.shiftKey? 10 : 1;
-        if (e.keyCode == this.key.S) {
-            mouse.toggleSnapToGrid();
-        } else if (e.keyCode == this.key.UP) {
-            vectors.nudgeActivePoint(0, -nudgeAmount);
-        } else if (e.keyCode == this.key.DOWN) {
-            vectors.nudgeActivePoint(0, nudgeAmount);
-        } else if (e.keyCode == this.key.LEFT) {
-            vectors.nudgeActivePoint(-nudgeAmount, 0);
-        } else if (e.keyCode == this.key.RIGHT) {
-            vectors.nudgeActivePoint(nudgeAmount, 0);
+
+        switch (e.keyCode) {
+            case this.key.UP:
+                vectors.nudgeActivePoint(0, -nudgeAmount);
+                break;
+            case this.key.DOWN:
+                vectors.nudgeActivePoint(0, nudgeAmount);
+                break;
+            case this.key.LEFT:
+                vectors.nudgeActivePoint(-nudgeAmount, 0);
+                break;
+            case this.key.RIGHT:
+                vectors.nudgeActivePoint(nudgeAmount, 0);
+                break;
+            case this.key.S:
+                mouse.toggleSnapToGrid();
+                break;
+            case this.key.SHIFT:
+                mouse.shiftMode();
+                break;
+        }
+    };
+
+    this.onKeyup = function(e) {
+        switch (e.keyCode) {
+            case this.key.SHIFT:
+                mouse.shiftMode();
+                break;
         }
     };
 
     window.addEventListener('keydown', this.onKeydown.bind(this));
+    window.addEventListener('keyup', this.onKeyup.bind(this));
 };
 
 var Grid = function() {
@@ -317,24 +345,26 @@ var Vectors = function() {
     this.update = function() {
         this.pos.reset(canvas.half.x - 0.5, canvas.half.y - 0.5);
 
-        mouse.clicks.forEach(function(c) {
-            if (c.hasFired) return;
+        if (mouse.mode == 'draw') {
+            mouse.clicks.forEach(function(c) {
+                if (c.hasFired) return;
 
-            var clickPos = c.centerPos.clone();
-            var lastVector = this.getLast();
+                var clickPos = c.centerPos.clone();
+                var lastVector = this.getLast();
 
-            if (!lastVector || lastVector.isClosed) {
-                lastVector = this.addVector(clickPos);
-            }
+                if (!lastVector || lastVector.isClosed) {
+                    lastVector = this.addVector(clickPos);
+                }
 
-            var firstPoint = lastVector.getFirst();
+                var firstPoint = lastVector.getFirst();
 
-            if (firstPoint && firstPoint.pos.equals(clickPos)) {
-               lastVector.closePath();
-            } else {
-                lastVector.addPoint(clickPos);
-            }
-        }.bind(this));
+                if (firstPoint && firstPoint.pos.equals(clickPos)) {
+                   lastVector.closePath();
+                } else {
+                    lastVector.addPoint(clickPos);
+                }
+            }.bind(this));
+        }
     };
 
     this.render = function() {
@@ -381,6 +411,13 @@ var Vectors = function() {
 
         this.active.active.nudge(x, y);
     };
+
+    this.addVector(new Vector2(0, 0));
+    this.list[0].addPoint(new Vector2(0,0));
+    this.list[0].addPoint(new Vector2(100,0));
+    this.list[0].addPoint(new Vector2(100,100));
+    this.list[0].addPoint(new Vector2(0,100));
+    this.list[0].closePath();
 };
 
 var Vector = function(pos, hue) {
@@ -442,8 +479,16 @@ var Vector = function(pos, hue) {
 
     this.renderPoints = function() {
         this.forEach(function(point) {
+            if (mouse.mode == 'edit') {
+                mouse.clicks.forEach(function(click) {
+                    if (click.centerPos.isCloseTo(point.pos, 10)) {
+                        this.makeActive(point);
+                    }
+                }.bind(this));
+            }
+            point.update();
             point.render();
-        });
+        }.bind(this));
     };
 
     this.getFirst = function() {
@@ -488,10 +533,18 @@ var Point = function(pos, hue) {
     this.pos = pos;
     this.radius = 3;
 
+    this.update = function() {
+        this.hovered = false;
+        if (mouse.mode == 'edit' && mouse.centerPos.isCloseTo(this.pos, 10)) {
+            this.hovered = true;
+            canvas.setCursor('pointer');
+        }
+    };
+
     this.render = function() {
         ctx.beginPath();
         ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI*2);
-        if (this.active) {
+        if (this.active || this.hovered) {
             ctx.fillStyle = '#FFF';
             ctx.fill();
             ctx.strokeStyle = this.fillStyle;

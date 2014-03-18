@@ -133,30 +133,44 @@ var Mouse = function() {
         ctx.restore();
     };
 
-    this.onMove = function(e) {
-        this.updatePos(e.clientX, e.clientY);
-
-        this.snapToStart();
-    };
-
-    this.onMouseOver = function() {
-        this.insideCanvas = true;
-    };
-
-    this.onMouseOut = function() {
-        this.insideCanvas = false;
-    };
-
-    this.onClick = function(e) {
+    this.onDown = function(e) {
         if (! this.insideCanvas) return;
 
         this.updatePos(e.clientX, e.clientY);
         this.snapToStart();
 
+        this.startPos = this.centerPos.clone();
+
         this.clicks.push({
             pos: this.pos.clone(),
             centerPos: this.centerPos.clone()
         });
+    };
+
+    this.onMove = function(e) {
+        this.updatePos(e.clientX, e.clientY);
+
+        if (this.startPos) {
+            this.dragPos = this.centerPos.clone();
+        }
+
+        this.snapToStart();
+    };
+
+    this.onUp = function(e) {
+        this.updatePos(e.clientX, e.clientY);
+
+        this.startPos = this.dragPos = null;
+
+        this.snapToStart();
+    };
+
+    this.onOver = function() {
+        this.insideCanvas = true;
+    };
+
+    this.onOut = function() {
+        this.insideCanvas = false;
     };
 
     this.updatePos = function(x, y) {
@@ -171,10 +185,10 @@ var Mouse = function() {
     this.snapToStart = function() {
         if (! this.insideCanvas) return;
 
-        var lastVector = vectors.getLast();
-        if (! lastVector) return;
+        var activeVector = vectors.active;
+        if (! activeVector) return;
 
-        var firstPoint = lastVector.getFirst();
+        var firstPoint = activeVector.getFirst();
         if (! firstPoint) return;
 
         if (this.centerPos.isCloseTo(firstPoint.pos, 5)) {
@@ -195,10 +209,11 @@ var Mouse = function() {
         this.clicks = [];
     };
 
+    window.addEventListener('mousedown', this.onDown.bind(this));
     window.addEventListener('mousemove', this.onMove.bind(this));
-    canvas.el.addEventListener('mouseover', this.onMouseOver.bind(this));
-    canvas.el.addEventListener('mouseout', this.onMouseOut.bind(this));
-    window.addEventListener('click', this.onClick.bind(this));
+    window.addEventListener('mouseup', this.onUp.bind(this));
+    canvas.el.addEventListener('mouseover', this.onOver.bind(this));
+    canvas.el.addEventListener('mouseout', this.onOut.bind(this));
 };
 
 var Keyboard = function() {
@@ -345,23 +360,27 @@ var Vectors = function() {
     this.update = function() {
         this.pos.reset(canvas.half.x - 0.5, canvas.half.y - 0.5);
 
+        this.forEach(function(vector){
+            vector.update();
+        });
+
         if (mouse.mode == 'draw') {
             mouse.clicks.forEach(function(c) {
                 if (c.hasFired) return;
 
                 var clickPos = c.centerPos.clone();
-                var lastVector = this.getLast();
+                var activeVector = this.active;
 
-                if (!lastVector || lastVector.isClosed) {
-                    lastVector = this.addVector(clickPos);
+                if (!activeVector || activeVector.isClosed) {
+                    activeVector = this.addVector(clickPos);
                 }
 
-                var firstPoint = lastVector.getFirst();
+                var firstPoint = activeVector.getFirst();
 
                 if (firstPoint && firstPoint.pos.equals(clickPos)) {
-                   lastVector.closePath();
+                   activeVector.closePath();
                 } else {
-                    lastVector.addPoint(clickPos);
+                    activeVector.addPoint(clickPos);
                 }
             }.bind(this));
         }
@@ -371,8 +390,8 @@ var Vectors = function() {
         ctx.save();
         ctx.translate(this.pos.x, this.pos.y);
 
-        this.forEach(function(vector, i){
-            var withMouseLine = (canvas.cursor == 'none' && i == this.list.length - 1 && mouse.insideCanvas && !vector.isClosed);
+        this.forEach(function(vector){
+            var withMouseLine = (canvas.cursor == 'none' && vector.active && mouse.insideCanvas && !vector.isClosed);
             vector.render(withMouseLine);
         }.bind(this));
 
@@ -412,6 +431,12 @@ var Vectors = function() {
         this.active.active.nudge(x, y);
     };
 
+    this.makeActive = function(vector){
+        if (this.active) this.active.deactivate();
+
+        this.active = vector;
+    };
+
     this.addVector(new Vector2(0, 0));
     this.list[0].addPoint(new Vector2(0,0));
     this.list[0].addPoint(new Vector2(100,0));
@@ -425,6 +450,21 @@ var Vector = function(pos, hue) {
     this.pos = pos;
     this.hue = hue;
     this.strokeStyle = hsl(this.hue, 100, 50);
+
+    this.update = function() {
+        this.forEach(function(point) {
+            if (mouse.mode == 'edit') {
+                if ((point.isDragging && mouse.dragPos) || (mouse.startPos && mouse.startPos.isCloseTo(point.pos, 10))) {
+                    this.makeActive(point);
+                    point.isDragging = true;
+                    if (mouse.dragPos) point.moveTo(mouse.dragPos);
+                } else {
+                    point.isDragging = false;
+                }
+            }
+            point.update();
+        }.bind(this));
+    };
 
     this.render = function(withMouseLine) {
         this.renderLines(withMouseLine);
@@ -479,16 +519,8 @@ var Vector = function(pos, hue) {
 
     this.renderPoints = function() {
         this.forEach(function(point) {
-            if (mouse.mode == 'edit') {
-                mouse.clicks.forEach(function(click) {
-                    if (click.centerPos.isCloseTo(point.pos, 10)) {
-                        this.makeActive(point);
-                    }
-                }.bind(this));
-            }
-            point.update();
             point.render();
-        }.bind(this));
+        });
     };
 
     this.getFirst = function() {
@@ -519,7 +551,14 @@ var Vector = function(pos, hue) {
         this.active.deactivate();
     };
 
+    this.deactivate = function() {
+        if (this.active) this.active.deactivate();
+        this.active = null;
+    };
+
     this.makeActive = function(point) {
+        if (vectors) vectors.makeActive(this);
+
         if (this.active) this.active.deactivate();
 
         this.active = point;
@@ -562,6 +601,10 @@ var Point = function(pos, hue) {
 
     this.deactivate = function() {
         this.active = false;
+    };
+
+    this.moveTo = function(pos) {
+        this.pos = pos.clone();
     };
 
     this.nudge = function(x, y) {

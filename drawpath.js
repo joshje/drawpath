@@ -97,14 +97,9 @@ var Mouse = function() {
     this.clicks = [];
     this.radius = 5;
     this.strokeStyle = '#000';
-    this.mode = 'draw';
 
     this.update = function() {
-        if (this.mode == 'draw') {
-            canvas.setCursor('none');
-        } else {
-            canvas.setCursor('default');
-        }
+        canvas.setCursor('none');
         if (vectors.active) {
             this.strokeStyle = hsl(vectors.active.hue, 50, 50);
         }
@@ -201,10 +196,6 @@ var Mouse = function() {
         this.snapToGrid = !this.snapToGrid;
     };
 
-    this.shiftMode = function() {
-        this.mode = (this.mode == 'draw')? 'edit' : 'draw';
-    };
-
     this.flush = function() {
         this.clicks = [];
     };
@@ -218,7 +209,6 @@ var Mouse = function() {
 
 var Keyboard = function() {
     this.key = {
-        SHIFT: 16,
         UP: 38,
         LEFT: 37,
         RIGHT: 39,
@@ -245,22 +235,10 @@ var Keyboard = function() {
             case this.key.S:
                 mouse.toggleSnapToGrid();
                 break;
-            case this.key.SHIFT:
-                mouse.shiftMode();
-                break;
-        }
-    };
-
-    this.onKeyup = function(e) {
-        switch (e.keyCode) {
-            case this.key.SHIFT:
-                mouse.shiftMode();
-                break;
         }
     };
 
     window.addEventListener('keydown', this.onKeydown.bind(this));
-    window.addEventListener('keyup', this.onKeyup.bind(this));
 };
 
 var Grid = function() {
@@ -364,12 +342,14 @@ var Vectors = function() {
             vector.update();
         });
 
-        if (mouse.mode == 'draw') {
+        if (canvas.cursor == 'none') {
             mouse.clicks.forEach(function(c) {
                 if (c.hasFired) return;
 
                 var clickPos = c.centerPos.clone();
                 var activeVector = this.active;
+
+                if (activeVector) activeVector.deactivate();
 
                 if (!activeVector || activeVector.isClosed) {
                     activeVector = this.addVector(clickPos);
@@ -436,13 +416,6 @@ var Vectors = function() {
 
         this.active = vector;
     };
-
-    this.addVector(new Vector2(0, 0));
-    this.list[0].addPoint(new Vector2(0,0));
-    this.list[0].addPoint(new Vector2(100,0));
-    this.list[0].addPoint(new Vector2(100,100));
-    this.list[0].addPoint(new Vector2(0,100));
-    this.list[0].closePath();
 };
 
 var Vector = function(pos, hue) {
@@ -453,16 +426,20 @@ var Vector = function(pos, hue) {
 
     this.update = function() {
         this.forEach(function(point) {
-            if (mouse.mode == 'edit') {
-                if ((point.isDragging && mouse.dragPos) || (mouse.startPos && mouse.startPos.isCloseTo(point.pos, 10))) {
-                    this.makeActive(point);
-                    point.isDragging = true;
-                    if (mouse.dragPos) point.moveTo(mouse.dragPos);
-                } else {
-                    point.isDragging = false;
-                }
+            if ((point.isDragging && mouse.dragPos) || (mouse.startPos && mouse.startPos.isCloseTo(point.pos, 5))) {
+                this.makeActive(point);
+                point.isDragging = true;
+                if (mouse.dragPos) point.moveTo(mouse.dragPos);
+            } else {
+                point.isDragging = false;
             }
-            point.update();
+
+            point.hovered = false;
+            if (mouse.centerPos.isCloseTo(point.pos, 5)) {
+                point.hovered = true;
+
+                if ((!point.isFirst) || this.isClosed) canvas.setCursor('pointer');
+            }
         }.bind(this));
     };
 
@@ -475,17 +452,15 @@ var Vector = function(pos, hue) {
     };
 
     this.renderLines = function(withMouseLine) {
-        var firstPoint = true;
 
         this.forEach(function(point) {
-            if (firstPoint) {
+            if (point.isFirst) {
                 ctx.beginPath();
                 code.addLine('ctx.beginPath();');
                 ctx.strokeStyle = this.strokeStyle;
                 //code.addLine('ctx.strokeStyle = \'' + this.strokeStyle + '\';');
                 ctx.moveTo(point.pos.x, point.pos.y);
                 code.addLine('ctx.moveTo(' + point.pos.x + ', ' + point.pos.y + ');');
-                firstPoint = false;
             } else {
                 ctx.lineTo(point.pos.x, point.pos.y);
                 code.addLine('ctx.lineTo(' + point.pos.x + ', ' + point.pos.y + ');');
@@ -542,13 +517,14 @@ var Vector = function(pos, hue) {
 
     this.addPoint = function(pos) {
         var point = new Point(pos, this.hue);
+        if (! this.list.length) point.isFirst = true;
         this.list.push(point);
         this.makeActive(point);
     };
 
     this.closePath = function() {
         this.isClosed = true;
-        this.active.deactivate();
+        if (this.active) this.active.deactivate();
     };
 
     this.deactivate = function() {
@@ -571,14 +547,6 @@ var Point = function(pos, hue) {
     this.fillStyle = hsl(hue, 100, 50);
     this.pos = pos;
     this.radius = 3;
-
-    this.update = function() {
-        this.hovered = false;
-        if (mouse.mode == 'edit' && mouse.centerPos.isCloseTo(this.pos, 10)) {
-            this.hovered = true;
-            canvas.setCursor('pointer');
-        }
-    };
 
     this.render = function() {
         ctx.beginPath();
@@ -617,50 +585,6 @@ var Controls = function() {
     this.buttons = [];
 
     this.buttons.push(new Button({
-        name: 'drawMode',
-        icon: function() {
-            ctx.beginPath();
-            ctx.moveTo(5, 10);
-            ctx.lineTo(8, 10);
-            ctx.moveTo(12, 10);
-            ctx.lineTo(15, 10);
-            ctx.moveTo(10, 5);
-            ctx.lineTo(10, 8);
-            ctx.moveTo(10, 12);
-            ctx.lineTo(10, 15);
-        },
-        checkActive: function() {
-            this.active = mouse.mode == 'draw';
-        },
-        onClick: function() {
-            mouse.mode = 'draw';
-        },
-        x: 10,
-        y: 10
-    }));
-
-    this.buttons.push(new Button({
-        name: 'editMode',
-        icon: function() {
-            ctx.beginPath();
-            ctx.moveTo(6, 10);
-            ctx.lineTo(6, 6);
-            ctx.lineTo(10, 6);
-            ctx.moveTo(6, 6);
-            ctx.lineTo(14, 14);
-            ctx.closePath();
-        },
-        checkActive: function() {
-            this.active = mouse.mode == 'edit';
-        },
-        onClick: function() {
-            mouse.mode = 'edit';
-        },
-        x: 36,
-        y: 10
-    }));
-
-    this.buttons.push(new Button({
         name: 'snapToGrid',
         icon: function() {
             ctx.beginPath();
@@ -679,7 +603,7 @@ var Controls = function() {
         onClick: function() {
             mouse.snapToGrid = !mouse.snapToGrid;
         },
-        x: 72,
+        x: 10,
         y: 10
     }));
 
@@ -730,8 +654,12 @@ var Button = function(params) {
         ctx.translate(this.pos.x - 0.5, this.pos.y - 0.5);
 
         ctx.beginPath();
-        ctx.rect(0, 0, this.size, this.size);
+        ctx.rect(2, 2, this.size, this.size);
+        ctx.fillStyle = 'rgba(0,0,0,0.1';
+        ctx.fill();
 
+        ctx.beginPath();
+        ctx.rect(0, 0, this.size, this.size);
         ctx.fillStyle = this.active? '#EEE' : '#FFF';
         ctx.fill();
         ctx.strokeStyle = (this.hovered)? '#AAA' : '#CCC';

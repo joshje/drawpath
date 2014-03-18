@@ -22,6 +22,7 @@ body {
     overflow: auto;
     padding: 10px;
     transition: background 1s linear, border-color 1s linear;
+    box-shadow: 3px 3px 0 rgba(0,0,0,0.1);
 }
 .drawpath-code:hover,
 .drawpath-code:focus {

@@ -8,7 +8,14 @@
         <link rel="stylesheet" href="style.css">
     </head>
     <body>
-        <script src="vec2.js"></script>
-        <script src="drawpath.js"></script>
+        <script src="scripts/require.js"></script>
+        <script>
+            require.config({
+                baseUrl: 'scripts'
+            });
+
+            // Use ?dev=1 in the URL to load unminified files
+            require(['drawpath' + (/(dev|local)/.test(location.search) ? '' : '.min')]);
+        </script>
     </body>
 </html>

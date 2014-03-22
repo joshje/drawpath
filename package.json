@@ -1,0 +1,24 @@
+{
+  "name": "drawpath",
+  "version": "0.0.1",
+  "description": "Draw canvas paths in the browser",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/joshje/drawpath.git"
+  },
+  "keywords": [
+    "canvas",
+    "javascript",
+    "path"
+  ],
+  "author": "Josh Emerson",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/joshje/drawpath/issues"
+  },
+  "homepage": "https://joshje.github.io/drawpath",
+  "devDependencies": {
+    "grunt": "^0.4.4",
+    "grunt-contrib-requirejs": "^0.4.3"
+  }
+}

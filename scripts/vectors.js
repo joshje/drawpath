@@ -10,6 +10,7 @@ define([
     mouse
 ) {
     var ctx = canvas.ctx;
+    var url;
 
     var Vectors = function() {
         this.list = [];
@@ -32,7 +33,8 @@ define([
                     if (activeVector) activeVector.deactivate();
 
                     if (!activeVector || activeVector.isClosed) {
-                        activeVector = this.addVector(clickPos);
+                        this.addVector(clickPos);
+                        return;
                     }
 
                     var firstPoint = activeVector.getFirst();
@@ -81,6 +83,7 @@ define([
             var vector = new Vector(pos, hue);
             this.list.push(vector);
             this.makeActive(vector);
+            this.updateURL();
 
             return vector;
         };
@@ -96,6 +99,11 @@ define([
             mouse.hue = vector.hue;
 
             this.active = vector;
+        };
+
+        this.updateURL = function() {
+            url = url || require('url');
+            url.update();
         };
     };
 

@@ -20,7 +20,6 @@ define([
 
     var Vector = function(pos, hue) {
         this.list = [];
-        this.pos = pos;
         this.hue = hue;
         this.strokeStyle = utils.hsl(this.hue, 100, 50);
 
@@ -156,7 +155,8 @@ define([
             url = url || require('url');
             url.update();
         };
-        this.updateURL();
+
+        this.addPoint(pos);
     };
 
     return Vector;

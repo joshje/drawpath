@@ -6,7 +6,8 @@ require([
     'mouse',
     'keyboard',
     'code',
-    'controls'
+    'controls',
+    'url'
 ],function(
     config,
     canvas,
@@ -15,8 +16,11 @@ require([
     mouse,
     keyboard,
     code,
-    controls
+    controls,
+    url
 ){
+    url.decode();
+
     var loop = function() {
         canvas.clear();
         code.clear();

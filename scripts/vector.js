@@ -15,6 +15,7 @@ define([
     mouse,
     code
 ) {
+    var url;
     var ctx = canvas.ctx;
 
     var Vector = function(pos, hue) {
@@ -120,12 +121,14 @@ define([
             this.list.push(point);
             this.makeActive(point);
             this.updateMouseStartPos();
+            this.updateURL();
         };
 
         this.closePath = function() {
             this.isClosed = true;
             if (this.active) this.active.deactivate();
             this.updateMouseStartPos();
+            this.updateURL();
         };
 
         this.deactivate = function() {
@@ -148,6 +151,12 @@ define([
 
             mouse.vectorStartPos = this.list[0] && this.list[0].pos;
         };
+
+        this.updateURL = function() {
+            url = url || require('url');
+            url.update();
+        };
+        this.updateURL();
     };
 
     return Vector;
